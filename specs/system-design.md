@@ -15,26 +15,30 @@ examples teach the model what each label means at inference time.
 ## Architecture
 
 ```
-                 ┌─────────────────────────────────────────┐
+                 ┌──────────────────────────────────────────┐
                  │              app.py (Gradio UI)          │
                  │   Classify tab  │  Evaluate tab          │
                  └────────┬────────┴──────────┬─────────────┘
                           │                   │
                           ▼                   ▼
-              ┌───────────────────┐  ┌──────────────────────┐
-              │   classifier.py   │  │    evaluate.py        │
-              │                   │  │                       │
-              │ load_labeled_     │  │ run_evaluation()      │
-              │   examples()      │  │ compute_accuracy()    │
-              │                   │  │ compute_per_class_    │
-              │ build_few_shot_   │  │   accuracy()          │
-              │   prompt()        │  │ format_evaluation_    │
-              │                   │  │   report()            │
-              │ classify_         │  └──────────┬────────────┘
-              │   episode()       │             │ calls classify_episode()
-              └────────┬──────────┘             │
-                       │                        │
-                       ▼                        ▼
+              ┌─────────────────────────────────────────────┐  ┌─────────────────────────────────────────────────────────┐
+              │           classifier.py                     │  │    evaluate.py                                          │
+              │                                             │  │                                                         │
+              │  load_labeled_examples()-> list[dict]       │  │ run_evaluation()-> dict                                 │
+              │  ()-> labeled                               │  │                                                         │  
+              │                                             │  │ compute_accuracy(list[str],list[str])-> float           │
+              │                                             │  │ (predictions, ground_truth)-> accuracy                  │
+              │                                             │  │                                                         │
+              │                                             │  │ compute_per_class_accuracy(list[str], list[str])-> dict │
+              │ build_few_shot_prompt(list[dict],str)-> str │  │ (predictions, ground_truth)-> dict                      │
+              │                                             │  │                                                         │
+              │ (labeled_examples, description) -> prompt   │  │ format_evaluation_report(eval_results: dict) -> str     │
+              │                                             │  │ (eval_results: dict) -> str                             │
+              │ classify_episode(str,list[dict])-> dict     │  └──────────┬──────────────────────────────────────────────┘
+              │ (description, labeled_examples)-> result    │             │ calls classify_episode()
+              └────────┬────────────────────────────────────┘             │
+                       │                                                  │
+                       ▼                                                  ▼
               ┌─────────────────────────────────────────────┐
               │              Groq LLM API                    │
               │   llama-3.3-70b-versatile                    │
