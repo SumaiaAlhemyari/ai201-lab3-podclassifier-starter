@@ -55,7 +55,54 @@ def build_few_shot_prompt(labeled_examples: list[dict], description: str) -> str
 
     Before writing code, complete specs/classifier-spec.md.
     """
-    return ""
+    # 1. Task instruction + the four label definitions (from the spec).
+    instruction = (
+        "You are classifying podcast episodes by their format. Classify the "
+        "episode into exactly one of these four labels:\n\n"
+        "- interview: a conversation between a host and one or more guests\n"
+        "- solo: a single host speaking from memory, experience, or opinion — "
+        "no guests, no assembled external sources\n"
+        "- panel: multiple guests with roughly equal speaking time, often "
+        "debating or discussing a topic together\n"
+        "- narrative: a story assembled from external sources — interviews, "
+        "archival audio, reporting — with a clear narrative arc"
+    )
+
+    # 2. The output format we ask for: a single JSON object, so classify_episode()
+    #    can parse it reliably (see the spec's output-format decision).
+    output_format = (
+        "Respond with ONLY a JSON object, no markdown fences or extra text, "
+        "in exactly this shape:\n"
+        '{"label": "<one of: interview, solo, panel, narrative>", '
+        '"reasoning": "<one or two sentences explaining the choice>"}'
+    )
+
+    parts = [instruction]
+
+    # 3. The few-shot examples. If there are none, skip this block entirely
+    #    (zero-shot fallback) instead of emitting an empty "Examples:" header.
+    if labeled_examples:
+        parts.append("Here are labeled examples. Study how each description maps to its label:")
+        for ex in labeled_examples:
+            parts.append(
+                f"Title: {ex['title']}\n"
+                f"Description: {ex['description']}\n"
+                f"Label: {ex['label']}"
+            )
+
+    # 4. The new episode to classify — same format as the examples, but with the
+    #    label left open instead of given.
+    parts.append(
+        "Now classify the following episode.\n\n"
+        f"Description: {description}\n"
+        "Label: ?"
+    )
+
+    # 5. Append the output-format instruction last, then join everything with a
+    #    clear "---" delimiter between blocks.
+    #  Resulting structure: instruction → --- → examples header → --- → example 1 → ... → --- → target episode → --- → output format
+    parts.append(output_format)
+    return "\n\n---\n\n".join(parts)
 
 
 def classify_episode(description: str, labeled_examples: list[dict]) -> dict:
@@ -76,7 +123,35 @@ def classify_episode(description: str, labeled_examples: list[dict]) -> dict:
 
     Before writing code, complete specs/classifier-spec.md.
     """
-    return {
-        "label": None,
-        "reasoning": "Classifier not yet implemented. Complete Milestone 2.",
-    }
+    try:
+        # Step 1 — Build the prompt from the labeled examples + this description.
+        prompt = build_few_shot_prompt(labeled_examples, description)
+
+        # Step 2 — Send it to the LLM and pull out the response text.
+        response = _client.chat.completions.create(
+            model=LLM_MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=300,
+        )
+        response_text = response.choices[0].message.content
+
+        # Step 3 — Parse the JSON out of the response. Slice from the first "{"
+        # to the last "}" so any stray prose or ```json fences are dropped.
+        text = response_text.strip()
+        start = text.find("{")
+        end = text.rfind("}")
+        data = json.loads(text[start:end + 1])
+
+        label = str(data["label"]).strip().lower()
+        reasoning = str(data.get("reasoning", "")).strip()
+
+        # Step 4 — Validate the label. Anything not in VALID_LABELS becomes "unknown".
+        if label not in VALID_LABELS:
+            label = "unknown"
+
+        return {"label": label, "reasoning": reasoning}
+
+    except Exception as e:
+        # Step 5 — Any failure (network, bad JSON, missing keys) returns a safe
+        # dict so one bad response can't crash the 20-call evaluation loop.
+        return {"label": "unknown", "reasoning": f"Error: {e}"}

@@ -256,7 +256,7 @@ Evidence is assembled from multiple sources. The episode has a story arc, not a 
 
 ---
 
-#### Edge cases
+####  cases
 
 | Situation | Label |
 |---|---|

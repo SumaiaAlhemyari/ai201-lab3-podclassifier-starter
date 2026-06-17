@@ -28,31 +28,31 @@ examples teach the model what each label means at inference time.
               │  ()-> labeled                               │  │                                                         │  
               │                                             │  │ compute_accuracy(list[str],list[str])-> float           │
               │                                             │  │ (predictions, ground_truth)-> accuracy                  │
+              │ build_few_shot_prompt(list[dict],str)-> str │  │                                                         │
+              │ (labeled_examples, description) -> prompt   │  │ compute_per_class_accuracy(list[str], list[str])-> dict │
+              │                                             │  │ (predictions, ground_truth)-> dict                      │
               │                                             │  │                                                         │
-              │                                             │  │ compute_per_class_accuracy(list[str], list[str])-> dict │
-              │ build_few_shot_prompt(list[dict],str)-> str │  │ (predictions, ground_truth)-> dict                      │
-              │                                             │  │                                                         │
-              │ (labeled_examples, description) -> prompt   │  │ format_evaluation_report(eval_results: dict) -> str     │
-              │                                             │  │ (eval_results: dict) -> str                             │
-              │ classify_episode(str,list[dict])-> dict     │  └──────────┬──────────────────────────────────────────────┘
-              │ (description, labeled_examples)-> result    │             │ calls classify_episode()
-              └────────┬────────────────────────────────────┘             │
-                       │                                                  │
-                       ▼                                                  ▼
-              ┌─────────────────────────────────────────────┐
-              │              Groq LLM API                    │
-              │   llama-3.3-70b-versatile                    │
-              │   Single chat completion per episode         │
-              └─────────────────────────────────────────────┘
-                       │
-                       ▼
-              ┌─────────────────┐   ┌─────────────────────┐
-              │  data/           │   │  config.py           │
-              │  train_episodes  │   │  VALID_LABELS        │
-              │  test_episodes   │   │  GROQ_API_KEY        │
-              │  my_labels.json  │   │  LLM_MODEL           │
-              │  taxonomy.md     │   └─────────────────────┘
-              └─────────────────┘
+              │                                             │  │ format_evaluation_report(eval_results: dict) -> str     │
+              │ classify_episode(str,list[dict])-> dict     │  │ (eval_results: dict) -> str                             │
+              │ (description, labeled_examples)-> result    │  │                                                         │
+              │                                             │  └────┬────────────────────────────────────────────────────┘      
+              └─────────────────┬───────────────────────────┘       │ calls classify_episode()
+                                │                                   │
+                                ▼                                   ▼
+                           ┌─────────────────────────────────────────────┐
+                           │              Groq LLM API                   │
+                           │   llama-3.3-70b-versatile                   │
+                           │   Single chat completion per episode        │
+                           └─────────────────────────────────────────────┘
+                                │
+                                ▼
+                           ┌─────────────────┐   ┌─────────────────────┐
+                           │  data/          │   │  config.py          │
+                           │  train_episodes │   │  VALID_LABELS       │
+                           │  test_episodes  │   │  GROQ_API_KEY       │
+                           │  my_labels.json │   │  LLM_MODEL          │
+                           │  taxonomy.md    │   └─────────────────────┘
+                           └─────────────────┘
 ```
 
 ---

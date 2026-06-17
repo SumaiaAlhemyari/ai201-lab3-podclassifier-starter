@@ -58,12 +58,21 @@ def compute_accuracy(predictions: list[str], ground_truth: list[str]) -> float:
 
     Before writing code, complete specs/evaluation-spec.md.
     """
-    return 0.0
+    # Step 1 — Guard the empty case so we never divide by zero.
+    if not predictions:
+        return 0.0
+
+    # Step 2 — Count positions where the prediction exactly matches the truth.
+    # zip pairs them up by index; (p == t) is True/False, and sum() treats
+    # True as 1, so this gives the number of correct predictions.
+    correct = sum(p == t for p, t in zip(predictions, ground_truth))
+
+    # Step 3 — Divide correct by the total number of predictions and return
+    # a float between 0.0 and 1.0.
+    return correct / len(predictions)
 
 
-def compute_per_class_accuracy(
-    predictions: list[str], ground_truth: list[str]
-) -> dict[str, dict]:
+def compute_per_class_accuracy(predictions: list[str], ground_truth: list[str]) -> dict[str, dict]:
     """
     Compute accuracy broken down by each label class.
 
@@ -83,7 +92,30 @@ def compute_per_class_accuracy(
 
     Before writing code, complete specs/evaluation-spec.md.
     """
-    return {label: {"correct": 0, "total": 0, "accuracy": 0.0} for label in VALID_LABELS}
+    # Step 1 — Initialize a stats bucket for every valid label, all at zero.
+    stats = {
+        label: {"correct": 0, "total": 0, "accuracy": 0.0}
+        for label in VALID_LABELS
+    }
+
+    # Step 2 — Walk the prediction/truth pairs together (matched by position).
+    for predicted, truth in zip(predictions, ground_truth):
+        # Step 3 — Bucket by GROUND TRUTH, not by the prediction. Skip any
+        # truth value that isn't a known label (e.g. "unknown" in the data).
+        if truth not in stats:
+            continue
+        stats[truth]["total"] += 1          # one more episode of this true class
+        if predicted == truth:
+            stats[truth]["correct"] += 1    # ...and it was classified correctly
+
+    # Step 4 — Turn the counts into a per-class accuracy. Guard total == 0
+    # so a class with no episodes stays at 0.0 instead of dividing by zero.
+    for label_stats in stats.values():
+        if label_stats["total"] > 0:
+            label_stats["accuracy"] = label_stats["correct"] / label_stats["total"]
+
+    # Step 5 — Return the dict keyed by label.
+    return stats
 
 
 def format_evaluation_report(eval_results: dict) -> str:

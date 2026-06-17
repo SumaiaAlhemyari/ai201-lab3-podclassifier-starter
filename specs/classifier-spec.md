@@ -65,9 +65,9 @@ label was applied — title and description are both useful; other fields
 **Example block sketch (write one concrete example):**
 
 ```
-Title: {title}
-Description: {description}
-Label: {label}
+Title: {Dr. Priya Nair on the Science of Sleep Deprivation}
+Description: {Dr. Priya Nair has spent fifteen years studying what happens to the brain when it doesn't sleep. In this episode, we talk through her landmark 2019 study on cumulative sleep debt, what the research says about weekend recovery sleep (spoiler: it doesn't work the way you think), and why she believes the eight-hour standard is more cultural myth than biological fact. She also shares what changed in her own sleep habits after spending a decade measuring everyone else's. If you've ever felt fine on five hours, this conversation will make you rethink that confidence.}
+Label: {interview}
 ```
 
 ---
@@ -91,10 +91,28 @@ the format below:" followed by the output format you chose.
 **What output format should you request from the LLM?**
 
 ```
+
 [blank — you need to parse the response in classify_episode(). What format
 makes parsing reliable? Think about: a single label on its own line?
 A structured format like "Label: X / Reasoning: Y"? JSON?
 What are the tradeoffs?]
+
+JSON — a single object: {"label": "<one of the four labels>", "reasoning": "<1-2 sentences>"}.
+
+Why JSON over the alternatives:
+- "Label: X / Reasoning: Y" is easy to read but brittle to parse — the model
+  varies the prefix ("Label:", "**Label**", "The label is"), so split-on-colon
+  logic breaks. Multi-line reasoning is also hard to capture.
+- A bare label on its own line is trivial to parse but throws away the reasoning,
+  and the model often adds a sentence anyway that then needs stripping.
+- JSON has explicit named keys, so label and reasoning are unambiguous regardless
+  of wording. json.loads() handles whitespace and multi-line values for free, and
+  the keys map directly onto the return dict.
+
+Tradeoff: the model can wrap JSON in ```json fences or add stray text, so the
+parser must strip fences / slice out the {...} substring before json.loads(),
+and fall back to "unknown" if that fails. The prompt asks for "ONLY a JSON
+object, no markdown fences" to minimize this.
 ```
 
 ---
@@ -104,6 +122,17 @@ What are the tradeoffs?]
 ```
 [blank — what if labeled_examples is empty? What if the description is very
 short? How does your prompt handle these?]
+
+A/ If labeled_examples is empty: build a zero-shot prompt — include the task
+instruction and the four label definitions, but omit the examples section
+entirely (no empty "Examples:" header). The model classifies from the
+definitions alone; accuracy is lower, so this is a fallback, not the norm.
+
+B/ If the description is very short or empty: still send it in the normal
+format. Don't fabricate detail. There may be too little signal to choose
+confidently — that's fine, the model can reason briefly and the result may
+fall through to "unknown" at validation. No special prompt branching needed
+beyond guarding against an empty examples block.
 ```
 
 ---
@@ -145,7 +174,7 @@ exactly as received — no modification needed before calling.
 
 ```
 Call _client.chat.completions.create() with:
-  - model: the model name from config (LLM_MODEL)
+  - model: the model name fro\\m config (LLM_MODEL)
   - messages: a list with one dict — {"role": "user", "content": prompt}
     (system-design.md shows an optional system message too — either shape works)
   - max_tokens: a reasonable limit (e.g., 200–300) to keep responses concise
@@ -162,6 +191,16 @@ Extract the response text from:
 [blank — how do you extract the label and reasoning from the LLM's text output?
 What string operations or parsing logic do you need?
 This depends on the output format you chose in build_few_shot_prompt.]
+
+The response is JSON, so:
+1. Take response.choices[0].message.content and .strip() it.
+2. If it's wrapped in a ```json ... ``` fence or has stray prose, slice from the
+   first "{" to the last "}" so only the JSON object remains.
+3. Call json.loads() on that substring to get a dict.
+4. Read data["label"] and data["reasoning"]. Normalize the label with
+   .strip().lower() before validating (handles "Interview", " interview ", etc.).
+5. Wrap steps 2-4 in try/except (json.JSONDecodeError, KeyError, TypeError) so a
+   malformed response falls through to label="unknown" rather than crashing.
 ```
 
 ---
@@ -171,6 +210,12 @@ This depends on the output format you chose in build_few_shot_prompt.]
 ```
 [blank — what do you do if the LLM returns a label that isn't in VALID_LABELS?
 What should label be set to?]
+
+After normalizing the parsed label (strip + lowercase), check whether it is in
+VALID_LABELS. If it is, keep it. If it isn't — the model returned something like
+"storytelling", an empty string, or extra words — set label to "unknown" and keep
+whatever reasoning was returned. "unknown" is a value the UI and evaluation already
+understand, so it never crashes; it just counts as an incorrect prediction.
 ```
 
 ---
@@ -181,6 +226,18 @@ What should label be set to?]
 [blank — what could go wrong? (Network error? Unparseable response?)
 What should the function return if something fails?
 Hint: the evaluation loop runs 20 calls — one bad response shouldn't crash everything.]
+
+Things that can fail:
+- The API call itself: network error, timeout, rate limit, bad API key.
+- The response isn't valid JSON, or is missing the "label"/"reasoning" keys.
+
+Wrap the whole flow (LLM call + parse) in try/except. On any exception, return
+a safe dict instead of raising:
+    {"label": "unknown", "reasoning": "Error: <short message>"}
+
+This guarantees classify_episode() always returns a dict with the right keys,
+so the evaluation loop's 20 calls keep going even if one episode fails — a single
+bad response can't crash the whole run.
 ```
 
 ---
